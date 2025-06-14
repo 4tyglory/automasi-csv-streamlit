@@ -5,7 +5,7 @@ import math
 import io
 import zipfile
 
-st.title("Automasi CSV dari Excel dengan ZIP hasil")
+st.title("Automasi CSV Multi Sheet dengan Pilihan Download")
 
 uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
 uploaded_db = st.file_uploader("Upload file Database (.xlsx)", type=["xlsx"])
@@ -45,25 +45,26 @@ if uploaded_excel and uploaded_db:
         st.stop()
 
     sheet_names = xls.sheet_names
-    sheet_selected = st.selectbox("Pilih sheet yang akan diproses", sheet_names)
 
-    if st.button("Proses"):
-        with st.spinner('Memproses data...'):
-            try:
+    # Variabel untuk simpan hasil proses setiap sheet
+    if 'processed_sheets' not in st.session_state:
+        st.session_state.processed_sheets = {}
+
+    if st.button("Proses Semua Sheet"):
+        with st.spinner('Memproses semua sheet...'):
+            processed = {}
+            for sheet_selected in sheet_names:
                 df = pd.read_excel(uploaded_excel, sheet_name=sheet_selected, header=None)
-
                 numbers_12digit = []
                 for _, row in df.iterrows():
                     for val in row.astype(str):
                         found = re.findall(r'\b\d{12}\b', val)
                         if found:
                             numbers_12digit.extend(found)
-
                 total_numbers = len(numbers_12digit)
                 if total_numbers == 0:
                     st.warning(f"Tidak ada angka 12 digit ditemukan di sheet '{sheet_selected}'.")
-                    st.stop()
-
+                    continue
                 num_files = math.ceil(total_numbers / batch_size)
 
                 db['Nama Barang Norm'] = db['Nama Barang'].apply(lambda x: normalize_text(extract_package_name(x)))
@@ -120,25 +121,38 @@ if uploaded_excel and uploaded_db:
 
                     files_buffers.append((filename, buffer))
 
-                # Buat zip di memori
+                processed[sheet_selected] = files_buffers
+
+            st.session_state.processed_sheets = processed
+            st.success("Semua sheet selesai diproses.")
+
+    if st.session_state.processed_sheets:
+        st.subheader("Pilih sheet untuk download:")
+        selected_sheets = st.multiselect(
+            "Centang sheet yang ingin di-download:",
+            options=list(st.session_state.processed_sheets.keys())
+        )
+
+        if st.button("Download ZIP dari Sheet Terpilih"):
+            if not selected_sheets:
+                st.warning("Silakan pilih minimal 1 sheet.")
+            else:
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-                    for filename, buffer in files_buffers:
-                        zip_file.writestr(filename, buffer.getvalue())
+                    for sheet_name in selected_sheets:
+                        for filename, buffer in st.session_state.processed_sheets[sheet_name]:
+                            zip_path = f"{sheet_name}/{filename}"
+                            zip_file.writestr(zip_path, buffer.getvalue())
                 zip_buffer.seek(0)
 
-                zip_filename = f"{sheet_selected.replace(' ', '_').replace('.', ',')}.zip"
-
-                st.success("Proses selesai! Unduh file ZIP hasil di bawah ini:")
+                zip_filename = f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
 
                 st.download_button(
-                    label=f"Download ZIP {zip_filename}",
+                    label="Download ZIP",
                     data=zip_buffer,
                     file_name=zip_filename,
                     mime="application/zip"
                 )
 
-            except Exception as e:
-                st.error(f"Terjadi kesalahan: {e}")
 else:
     st.info("Silakan upload file Excel dan Database terlebih dahulu.")
