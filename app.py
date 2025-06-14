@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import re
 import math
-from io import BytesIO
-import os
+import io
+import zipfile
 
-st.title("Automasi CSV dari Excel (Versi Sinkron Offline)")
+st.title("Automasi CSV dari Excel dengan ZIP hasil")
 
 uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
 uploaded_db = st.file_uploader("Upload file Database (.xlsx)", type=["xlsx"])
@@ -66,7 +66,6 @@ if uploaded_excel and uploaded_db:
 
                 num_files = math.ceil(total_numbers / batch_size)
 
-                # Normalisasi database dan sheet nama paket
                 db['Nama Barang Norm'] = db['Nama Barang'].apply(lambda x: normalize_text(extract_package_name(x)))
                 sheet_norm = normalize_text(extract_package_name(sheet_selected))
                 match_db = db[db['Nama Barang Norm'] == sheet_norm]
@@ -115,21 +114,29 @@ if uploaded_excel and uploaded_db:
                     else:
                         filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
 
-                    buffer = BytesIO()
+                    buffer = io.BytesIO()
                     buffer.write('\n'.join(batch_numbers).encode('utf-8'))
                     buffer.seek(0)
 
                     files_buffers.append((filename, buffer))
 
-                st.success("Proses selesai! Unduh file CSV di bawah ini:")
+                # Buat zip di memori
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+                    for filename, buffer in files_buffers:
+                        zip_file.writestr(filename, buffer.getvalue())
+                zip_buffer.seek(0)
 
-                for filename, buffer in files_buffers:
-                    st.download_button(
-                        label=f"Download {filename}",
-                        data=buffer,
-                        file_name=filename,
-                        mime='text/csv'
-                    )
+                zip_filename = f"{sheet_selected.replace(' ', '_').replace('.', ',')}.zip"
+
+                st.success("Proses selesai! Unduh file ZIP hasil di bawah ini:")
+
+                st.download_button(
+                    label=f"Download ZIP {zip_filename}",
+                    data=zip_buffer,
+                    file_name=zip_filename,
+                    mime="application/zip"
+                )
 
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
