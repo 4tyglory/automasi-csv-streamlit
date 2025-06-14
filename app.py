@@ -10,8 +10,32 @@ st.title("Automasi CSV dari Excel")
 uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
 uploaded_db = st.file_uploader("Upload file Database (.xlsx)", type=["xlsx"])
 
+def normalize_text(s):
+    if not isinstance(s, str):
+        s = str(s)
+    return re.sub(r'\s+', '', s.lower())
+
+def extract_package_name(sheet_name):
+    pattern = r'(\d+[\.,]?\d*\s*gb)\s*(\d+\s*(h|hari))\s*(z\d+)'
+    match = re.search(pattern, sheet_name, re.IGNORECASE)
+    if match:
+        kuota = match.group(1).replace(',', '.').lower()
+        hari_num = re.findall(r'\d+', match.group(2))[0]
+        hari = f"{hari_num}h"
+        zona = match.group(4).lower()
+        return f"{kuota} {hari} {zona}"
+    else:
+        return sheet_name.lower()
+
+def format_decimal_with_koma(s):
+    s = s.lower()
+    if '.' in s:
+        s = s.replace('.', 'koma')
+    return s
+
+batch_size = 1000
+
 if uploaded_excel and uploaded_db:
-    # Load file
     try:
         db = pd.read_excel(uploaded_db)
         xls = pd.ExcelFile(uploaded_excel)
@@ -21,37 +45,6 @@ if uploaded_excel and uploaded_db:
 
     sheet_names = xls.sheet_names
     sheet_selected = st.selectbox("Pilih sheet yang akan diproses", sheet_names)
-
-    batch_size = 1000
-
-    def normalize_text(s):
-        if not isinstance(s, str):
-            s = str(s)
-        return re.sub(r'\s+', '', s.lower())
-
-    def parse_sheet_name(name):
-        kuota = None
-        kuota_match = re.search(r'(\d+[\.,]?\d*)\s*gb', name, re.IGNORECASE)
-        if kuota_match:
-            kuota = kuota_match.group(1).replace(',', '.')
-
-        hari = None
-        hari_match = re.search(r'(\d+)\s*h', name, re.IGNORECASE)
-        if hari_match:
-            hari = hari_match.group(1)
-
-        zona = None
-        zona_match = re.search(r'(z\d+)', name, re.IGNORECASE)
-        if zona_match:
-            zona = zona_match.group(1).lower()
-
-        return kuota, hari, zona
-
-    def format_decimal_with_koma(s):
-        s = s.lower()
-        if '.' in s:
-            s = s.replace('.', 'koma')
-        return s
 
     if st.button("Proses"):
         with st.spinner('Memproses data...'):
@@ -72,8 +65,8 @@ if uploaded_excel and uploaded_db:
 
                 num_files = math.ceil(total_numbers / batch_size)
 
-                db['Nama Barang Norm'] = db['Nama Barang'].apply(normalize_text)
-                sheet_norm = normalize_text(sheet_selected)
+                db['Nama Barang Norm'] = db['Nama Barang'].apply(lambda x: normalize_text(extract_package_name(x)))
+                sheet_norm = normalize_text(extract_package_name(sheet_selected))
                 match_db = db[db['Nama Barang Norm'] == sheet_norm]
 
                 if not match_db.empty:
@@ -85,8 +78,20 @@ if uploaded_excel and uploaded_db:
                     bulk_code = 'bulkUnknown'
                     zona_db = ''
 
-                kuota, hari, zona_sheet = parse_sheet_name(sheet_selected)
-                zona = zona_db if zona_db and str(zona_db).strip() != '-' and str(zona_db).strip() != '' else ''
+                kuota, hari, zona_sheet = None, None, None
+                # Parsing paket nama sheet sesuai fungsi offline
+                pattern = r'(\d+[\.,]?\d*)\s*gb'
+                kuota_match = re.search(pattern, sheet_selected, re.IGNORECASE)
+                if kuota_match:
+                    kuota = kuota_match.group(1).replace(',', '.')
+                hari_match = re.search(r'(\d+)\s*h', sheet_selected, re.IGNORECASE)
+                if hari_match:
+                    hari = hari_match.group(1)
+                zona_match = re.search(r'(z\d+)', sheet_selected, re.IGNORECASE)
+                if zona_match:
+                    zona_sheet = zona_match.group(1).lower()
+
+                zona = zona_db if zona_db and str(zona_db).strip() != '-' and str(zona_db).strip() != '' else (zona_sheet if zona_sheet else '')
 
                 kuota_text_raw = f"{kuota}gb" if kuota else "unknowngb"
                 kuota_text = format_decimal_with_koma(kuota_text_raw)
@@ -101,14 +106,14 @@ if uploaded_excel and uploaded_db:
                     qty = len(batch_numbers)
                     file_index = i + 1
 
-                    hari_text = f"{hari}hari" if hari else "unknownhari"
+                    hari_raw = f"{hari}h" if hari else "unknownhari"
+                    hari_text = re.sub(r'h$', 'hari', hari_raw)
 
                     if zona:
                         filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {zona} {qty}.csv"
                     else:
                         filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
 
-                    # Buat file CSV di memory buffer
                     buffer = BytesIO()
                     buffer.write('\n'.join(batch_numbers).encode('utf-8'))
                     buffer.seek(0)
@@ -127,3 +132,5 @@ if uploaded_excel and uploaded_db:
 
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
+else:
+    st.info("Silakan upload file Excel dan Database terlebih dahulu.")
