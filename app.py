@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import re
 import math
-import os
 from io import BytesIO
+import os
 
-st.title("Automasi CSV dari Excel")
+st.title("Automasi CSV dari Excel (Versi Sinkron Offline)")
 
 uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
 uploaded_db = st.file_uploader("Upload file Database (.xlsx)", type=["xlsx"])
@@ -13,7 +13,8 @@ uploaded_db = st.file_uploader("Upload file Database (.xlsx)", type=["xlsx"])
 def normalize_text(s):
     if not isinstance(s, str):
         s = str(s)
-    return re.sub(r'\s+', '', s.lower())
+    s = s.lower().replace('.', ',').replace(' ', '')
+    return s
 
 def extract_package_name(sheet_name):
     pattern = r'(\d+[\.,]?\d*\s*gb)\s*(\d+\s*(h|hari))\s*(z\d+)'
@@ -65,6 +66,7 @@ if uploaded_excel and uploaded_db:
 
                 num_files = math.ceil(total_numbers / batch_size)
 
+                # Normalisasi database dan sheet nama paket
                 db['Nama Barang Norm'] = db['Nama Barang'].apply(lambda x: normalize_text(extract_package_name(x)))
                 sheet_norm = normalize_text(extract_package_name(sheet_selected))
                 match_db = db[db['Nama Barang Norm'] == sheet_norm]
@@ -79,9 +81,8 @@ if uploaded_excel and uploaded_db:
                     zona_db = ''
 
                 kuota, hari, zona_sheet = None, None, None
-                # Parsing paket nama sheet sesuai fungsi offline
-                pattern = r'(\d+[\.,]?\d*)\s*gb'
-                kuota_match = re.search(pattern, sheet_selected, re.IGNORECASE)
+                pattern_kuota = r'(\d+[\.,]?\d*)\s*gb'
+                kuota_match = re.search(pattern_kuota, sheet_selected, re.IGNORECASE)
                 if kuota_match:
                     kuota = kuota_match.group(1).replace(',', '.')
                 hari_match = re.search(r'(\d+)\s*h', sheet_selected, re.IGNORECASE)
