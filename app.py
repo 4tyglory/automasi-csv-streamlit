@@ -121,28 +121,25 @@ if menu == "Automasi CSV":
         st.info("Silakan upload file Excel terlebih dahulu.")
 
 elif menu == "Validasi CSV":
-    st.title("Validasi CSV")
+    st.title("Validasi CSV - Debug Mode")
+
     uploaded_csv = st.file_uploader(
-        "Upload file CSV hasil proses untuk validasi",
+        "Upload file CSV untuk validasi",
         type=["csv"],
         accept_multiple_files=True
     )
 
     if uploaded_csv:
-        validation_results = {}
-
         for csv_file in uploaded_csv:
-            filename = csv_file.name
-
+            st.write(f"### Preview: {csv_file.name}")
             try:
                 df_csv = pd.read_csv(csv_file, header=None)
-                csv_numbers = df_csv[0].astype(str).tolist()
+                st.dataframe(df_csv.head())
             except Exception as e:
-                validation_results[filename] = {
-                    "valid": False,
-                    "reason": f"Gagal baca file CSV: {e}"
-                }
+                st.error(f"Error baca CSV: {e}")
                 continue
+
+            csv_numbers = df_csv[0].astype(str).tolist()
 
             invalid_numbers = [num for num in csv_numbers if not re.fullmatch(r'\d{12}', num)]
 
@@ -155,23 +152,15 @@ elif menu == "Validasi CSV":
                     seen.add(num)
 
             if invalid_numbers:
-                reason = f"Ada angka tidak valid (bukan 12 digit): {', '.join(invalid_numbers)}"
-                valid = False
-            elif duplicates:
-                reason = f"Ada angka duplikat: {', '.join(duplicates)}"
-                valid = False
+                st.error(f"❌ Angka tidak valid (bukan 12 digit): {invalid_numbers}")
             else:
-                reason = "Valid: Semua angka 12 digit dan tanpa duplikat"
-                valid = True
+                st.success("✅ Semua angka valid 12 digit")
 
-            validation_results[filename] = {"valid": valid, "reason": reason}
-
-        st.write("### Hasil Validasi CSV")
-        for fname, res in validation_results.items():
-            if res["valid"]:
-                st.success(f"✅ {fname}: {res['reason']}")
+            if duplicates:
+                st.warning(f"⚠️ Terdapat angka duplikat: {list(duplicates)}")
             else:
-                st.error(f"⚠️ {fname}: {res['reason']}")
+                st.success("✅ Tidak ada angka duplikat")
+
     else:
         st.info("Silakan upload minimal satu file CSV untuk validasi.")
 
