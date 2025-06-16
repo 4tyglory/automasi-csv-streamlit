@@ -14,6 +14,16 @@ def extract_12digit_numbers(df):
                 numbers.extend(found)
     return numbers
 
+def check_duplicates(lst):
+    seen = set()
+    duplicates = []
+    for x in lst:
+        if x in seen:
+            duplicates.append(x)
+        else:
+            seen.add(x)
+    return duplicates
+
 st.set_page_config(page_title="Automasi CSV Excel", layout="wide")
 st.title("Automasi CSV Multi Sheet dengan Pilihan Download")
 
@@ -34,17 +44,20 @@ if uploaded_excel:
             processed = {}
             for idx, sheet_selected in enumerate(sheet_names):
                 df = pd.read_excel(uploaded_excel, sheet_name=sheet_selected, header=None)
-                numbers_12digit = []
-                for _, row in df.iterrows():
-                    for val in row.astype(str):
-                        found = re.findall(r'\b\d{12}\b', val)
-                        if found:
-                            numbers_12digit.extend(found)
+                numbers_12digit = extract_12digit_numbers(df)
                 total_numbers = len(numbers_12digit)
                 if total_numbers == 0:
                     st.warning(f"⚠️ Tidak ada angka 12 digit ditemukan di sheet **{sheet_selected}**.")
                     progress_bar.progress((idx+1)/len(sheet_names))
                     continue
+
+                # Cek duplikat angka
+                duplicates = check_duplicates(numbers_12digit)
+                if duplicates:
+                    st.warning(f"⚠️ Sheet **{sheet_selected}** mengandung duplikat angka: {set(duplicates)}")
+                else:
+                    st.success(f"✅ Sheet **{sheet_selected}** tidak mengandung duplikat angka.")
+
                 num_files = math.ceil(total_numbers / batch_size)
 
                 files_buffers = []
