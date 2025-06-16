@@ -105,6 +105,7 @@ if uploaded_excel:
     if 'processed_sheets' not in st.session_state:
         st.session_state.processed_sheets = {}
 
+    # Proses semua sheet dan buat CSV batch
     if st.button("▶️ Proses Semua Sheet"):
         with st.spinner('⚙️ Memproses semua sheet...'):
             progress_bar = st.progress(0)
@@ -184,11 +185,11 @@ if uploaded_excel:
             st.session_state.processed_sheets = processed
             st.success("🎉 Semua sheet selesai diproses.")
 
+    # Tampilkan daftar sheet yang sudah diproses dengan checkbox
     if st.session_state.processed_sheets:
         st.subheader("📋 Sheet yang sudah diproses:")
         sheet_list = list(st.session_state.processed_sheets.keys())
 
-        # Container dengan class checkbox-container
         st.markdown('<div class="checkbox-container">', unsafe_allow_html=True)
         selected_sheets = []
         for sheet in sheet_list:
@@ -199,6 +200,7 @@ if uploaded_excel:
             st.markdown('<div class="checkbox-item"></div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+        # Tombol download zip dari sheet terpilih
         if st.button("📦 Download ZIP dari Sheet Terpilih"):
             if not selected_sheets:
                 st.warning("⚠️ Silakan pilih minimal 1 sheet.")
@@ -211,7 +213,10 @@ if uploaded_excel:
                             zip_file.writestr(zip_path, buffer.getvalue())
                 zip_buffer.seek(0)
 
-                zip_filename = f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
+                if len(selected_sheets) == len(st.session_state.processed_sheets):
+                    zip_filename = "all sheet.zip"
+                else:
+                    zip_filename = f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
 
                 st.download_button(
                     label="📥 Download ZIP",
@@ -219,6 +224,35 @@ if uploaded_excel:
                     file_name=zip_filename,
                     mime="application/zip"
                 )
+
+        # === FITUR VALIDASI CSV ===
+        st.subheader("🔍 Validasi File CSV Hasil Download")
+
+        uploaded_csv = st.file_uploader("Upload file CSV hasil download", type=["csv"])
+
+        sheet_for_validation = st.selectbox("Pilih sheet untuk validasi", sheet_list if sheet_list else [])
+
+        if uploaded_csv and sheet_for_validation:
+            try:
+                csv_content = pd.read_csv(uploaded_csv, header=None)
+                df_sheet = pd.read_excel(uploaded_excel, sheet_name=sheet_for_validation, header=None)
+            except Exception as e:
+                st.error(f"⚠️ Error membaca file: {e}")
+            else:
+                numbers_12digit_sheet = []
+                for _, row in df_sheet.iterrows():
+                    for val in row.astype(str):
+                        found = re.findall(r'\b\d{12}\b', val)
+                        if found:
+                            numbers_12digit_sheet.extend(found)
+
+                numbers_12digit_csv = csv_content[0].astype(str).tolist()
+
+                if sorted(numbers_12digit_csv) == sorted(numbers_12digit_sheet):
+                    st.success("✅ File CSV valid dan sesuai dengan sheet Excel.")
+                else:
+                    st.error("❌ File CSV tidak cocok dengan sheet Excel.")
+
 else:
     st.info("📂 Silakan upload file Excel terlebih dahulu.")
 
@@ -249,6 +283,6 @@ st.markdown("""
 }
 </style>
 <div class="footer">
-    App Version update: 16.06.2025 | Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
+    Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
 </div>
 """, unsafe_allow_html=True)
