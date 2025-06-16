@@ -36,6 +36,26 @@ def format_decimal_with_koma(s):
         s = s.replace('.', 'koma')
     return s
 
+def render_sheet_cards(sheet_list, cols_per_row=3):
+    rows = [sheet_list[i:i + cols_per_row] for i in range(0, len(sheet_list), cols_per_row)]
+    for row_sheets in rows:
+        cols = st.columns(len(row_sheets))
+        for col, sheet_name in zip(cols, row_sheets):
+            box_html = f"""
+            <div style="
+                border: 1px solid #ccc; 
+                padding: 10px; 
+                margin: 5px; 
+                border-radius: 8px; 
+                background-color: #f9f9f9; 
+                text-align: center;
+                font-weight: bold;
+                ">
+                {sheet_name}
+            </div>
+            """
+            col.markdown(box_html, unsafe_allow_html=True)
+
 batch_size = 1000
 
 if uploaded_excel and uploaded_db:
@@ -51,7 +71,6 @@ if uploaded_excel and uploaded_db:
     if 'processed_sheets' not in st.session_state:
         st.session_state.processed_sheets = {}
 
-    # Tombol proses otomatis muncul saat file diupload
     if st.button("▶️ Proses Semua Sheet"):
         with st.spinner('⚙️ Memproses semua sheet...'):
             progress_bar = st.progress(0)
@@ -132,33 +151,35 @@ if uploaded_excel and uploaded_db:
             st.success("🎉 Semua sheet selesai diproses.")
 
     if st.session_state.processed_sheets:
-        with st.expander("📋 Pilih sheet untuk download hasil CSV:"):
-            col1, col2 = st.columns([3, 1])
+        st.subheader("📋 Sheet yang sudah diproses:")
+        render_sheet_cards(list(st.session_state.processed_sheets.keys()), cols_per_row=3)
 
-            with col1:
-                selected_sheets = st.multiselect(
-                    "✅ Centang sheet yang ingin di-download:",
-                    options=list(st.session_state.processed_sheets.keys()),
-                    default=list(st.session_state.processed_sheets.keys())
+        st.subheader("✅ Pilih sheet untuk download hasil CSV:")
+        selected_sheets = st.multiselect(
+            "Centang sheet yang ingin di-download:",
+            options=list(st.session_state.processed_sheets.keys()),
+            default=list(st.session_state.processed_sheets.keys())
+        )
+
+        if st.button("📦 Download ZIP dari Sheet Terpilih"):
+            if not selected_sheets:
+                st.warning("⚠️ Silakan pilih minimal 1 sheet.")
+            else:
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+                    for sheet_name in selected_sheets:
+                        for filename, buffer in st.session_state.processed_sheets[sheet_name]:
+                            zip_path = f"{sheet_name}/{filename}"
+                            zip_file.writestr(zip_path, buffer.getvalue())
+                zip_buffer.seek(0)
+
+                zip_filename = f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
+
+                st.download_button(
+                    label="📥 Download ZIP",
+                    data=zip_buffer,
+                    file_name=zip_filename,
+                    mime="application/zip"
                 )
-            with col2:
-                if st.button("📦 Download ZIP dari Sheet Terpilih"):
-                    if not selected_sheets:
-                        st.warning("⚠️ Silakan pilih minimal 1 sheet.")
-                    else:
-                        zip_buffer = io.BytesIO()
-                        with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-                            for sheet_name in selected_sheets:
-                                for filename, buffer in st.session_state.processed_sheets[sheet_name]:
-                                    zip_path = f"{sheet_name}/{filename}"
-                                    zip_file.writestr(zip_path, buffer.getvalue())
-                        zip_buffer.seek(0)
-
-                        zip_filename = f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
-
-                        st.download_button(
-                            label="📥 Download ZIP",
-                            data=zip_buffer,
-                            file_name=zip_filename,
-                            mime="application/zip"
-                        )
+else:
+    st.info("📂 Silakan upload file Excel dan Database terlebih dahulu.")
