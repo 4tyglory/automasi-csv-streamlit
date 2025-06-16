@@ -6,7 +6,8 @@ import io
 import zipfile
 
 st.set_page_config(page_title="Automasi CSV Multi Sheet", layout="wide")
-st.title("🚀 Automasi CSV Multi Sheet dengan Checkbox Horizontal")
+
+st.title("🚀 Automasi CSV Multi Sheet dengan Pilihan Download")
 
 uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
 uploaded_db = st.file_uploader("📥 Upload file Database (.xlsx)", type=["xlsx"])
@@ -55,6 +56,28 @@ st.markdown("""
     background-color: #f5f5f5;
     border-radius: 6px;
     user-select: none;
+}
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: #f1f1f1;
+    color: #555;
+    text-align: center;
+    padding: 5px 0;
+    font-size: 14px;
+    font-family: Arial, sans-serif;
+    border-top: 1px solid #ddd;
+    z-index: 1000;
+}
+.footer a {
+    color: #0366d6;
+    text-decoration: none;
+    font-weight: bold;
+}
+.footer a:hover {
+    text-decoration: underline;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -186,5 +209,34 @@ if uploaded_excel and uploaded_db:
                     file_name=zip_filename,
                     mime="application/zip"
                 )
-else:
-    st.info("📂 Silakan upload file Excel dan Database terlebih dahulu.")
+
+# Footer dengan info author dan GitHub
+st.markdown("""
+<style>
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: #f1f1f1;
+    color: #555;
+    text-align: center;
+    padding: 5px 0;
+    font-size: 14px;
+    font-family: Arial, sans-serif;
+    border-top: 1px solid #ddd;
+    z-index: 1000;
+}
+.footer a {
+    color: #0366d6;
+    text-decoration: none;
+    font-weight: bold;
+}
+.footer a:hover {
+    text-decoration: underline;
+}
+</style>
+<div class="footer">
+    Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
+</div>
+""", unsafe_allow_html=True)
