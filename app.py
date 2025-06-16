@@ -125,7 +125,8 @@ elif menu == "Validasi CSV":
     uploaded_excel = st.file_uploader("Upload file Excel asli (.xlsx) untuk validasi", type=["xlsx"])
     uploaded_csv = st.file_uploader("Upload file CSV hasil proses untuk validasi", type=["csv"], accept_multiple_files=True)
 
-    if uploaded_excel and uploaded_csv:
+    excel_sheets = []
+    if uploaded_excel:
         try:
             xls = pd.ExcelFile(uploaded_excel)
             excel_sheets = xls.sheet_names
@@ -133,6 +134,9 @@ elif menu == "Validasi CSV":
             st.error(f"Error baca file Excel: {e}")
             st.stop()
 
+    sheet_for_validation = st.selectbox("Pilih sheet untuk validasi", excel_sheets)
+
+    if uploaded_excel and uploaded_csv and sheet_for_validation:
         validation_results = {}
 
         for csv_file in uploaded_csv:
@@ -187,3 +191,34 @@ elif menu == "Validasi CSV":
 
     else:
         st.info("Silakan upload file Excel asli dan minimal satu file CSV hasil proses.")
+
+# Footer
+st.markdown("""
+<style>
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: #f1f1f1;
+    color: #555;
+    text-align: center;
+    padding: 5px 0;
+    font-size: 14px;
+    font-family: Arial, sans-serif;
+    border-top: 1px solid #ddd;
+    z-index: 1000;
+}
+.footer a {
+    color: #0366d6;
+    text-decoration: none;
+    font-weight: bold;
+}
+.footer a:hover {
+    text-decoration: underline;
+}
+</style>
+<div class="footer">
+    Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
+</div>
+""", unsafe_allow_html=True)
