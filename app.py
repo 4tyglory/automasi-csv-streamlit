@@ -5,7 +5,7 @@ import math
 import io
 import zipfile
 
-st.title("Automasi CSV Multi Sheet dengan Pilihan Download")
+st.title("Automasi CSV Multi Sheet dengan Pilihan Download Otomatis")
 
 uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
 uploaded_db = st.file_uploader("Upload file Database (.xlsx)", type=["xlsx"])
@@ -46,7 +46,6 @@ if uploaded_excel and uploaded_db:
 
     sheet_names = xls.sheet_names
 
-    # Variabel untuk simpan hasil proses setiap sheet
     if 'processed_sheets' not in st.session_state:
         st.session_state.processed_sheets = {}
 
@@ -63,7 +62,6 @@ if uploaded_excel and uploaded_db:
                             numbers_12digit.extend(found)
                 total_numbers = len(numbers_12digit)
                 if total_numbers == 0:
-                    st.warning(f"Tidak ada angka 12 digit ditemukan di sheet '{sheet_selected}'.")
                     continue
                 num_files = math.ceil(total_numbers / batch_size)
 
