@@ -12,7 +12,6 @@ st.title("Automatic tools for Aktivator")
 
 uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
 
-# Load database lokal dari folder ./data/database.xlsx
 db_path = "./data/database.xlsx"
 if not os.path.exists(db_path):
     st.error(f"⚠️ File database lokal tidak ditemukan di path {db_path}")
@@ -250,4 +249,6 @@ st.markdown("""
 }
 </style>
 <div class="footer">
-   App Version update: 16.06.2025 | Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4ty
+    Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
+</div>
+""", unsafe_allow_html=True)
