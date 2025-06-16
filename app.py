@@ -5,9 +5,9 @@ import math
 import io
 import zipfile
 
-st.set_page_config(page_title="Automasi CSV Multi Sheet", layout="wide")
+st.set_page_config(page_title="Automatic tools for Aktivator", layout="wide")
 
-st.title("🚀 Automasi CSV Multi Sheet dengan Pilihan Download")
+st.title("Automatic tools for Aktivator")
 
 uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
 uploaded_db = st.file_uploader("📥 Upload file Database (.xlsx)", type=["xlsx"])
