@@ -30,7 +30,6 @@ def normalize_name(name: str) -> str:
     name = name.replace(".", "koma")
     name = name.replace("-", "")
     name = name.replace("_", "")
-    # Tambah penggantian lain jika perlu
     return name
 
 st.set_page_config(page_title="Automation & Validation CSV", layout="wide")
@@ -152,9 +151,8 @@ elif menu == "Validasi CSV":
             matched_sheet = None
             for sheet in excel_sheets:
                 sheet_norm = normalize_name(sheet)
-                # Debug output nama normalisasi
                 st.write(f"Debug: normalisasi CSV '{csv_name_norm}' vs Sheet '{sheet_norm}'")
-                if sheet_norm in csv_name_norm:
+                if sheet_norm in csv_name_norm or csv_name_norm in sheet_norm:
                     matched_sheet = sheet
                     break
 
