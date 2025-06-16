@@ -7,10 +7,16 @@ import zipfile
 
 st.set_page_config(page_title="Automatic tools for Aktivator", layout="wide")
 
-st.title("Automatic tools for Aktivator")
+st.title("⚡ Automatic tools for Aktivator")
 
 uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
-uploaded_db = st.file_uploader("📥 Upload file Database (.xlsx)", type=["xlsx"])
+
+# Load database lokal dari folder ./data/database.xlsx
+try:
+    db = pd.read_excel("./data/database.xlsx")
+except Exception as e:
+    st.error(f"⚠️ Gagal membaca database lokal: {e}")
+    st.stop()
 
 def normalize_text(s):
     if not isinstance(s, str):
@@ -82,12 +88,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-if uploaded_excel and uploaded_db:
+if uploaded_excel:
     try:
-        db = pd.read_excel(uploaded_db)
         xls = pd.ExcelFile(uploaded_excel)
     except Exception as e:
-        st.error(f"⚠️ Error membaca file: {e}")
+        st.error(f"⚠️ Error membaca file Excel: {e}")
         st.stop()
 
     sheet_names = xls.sheet_names
@@ -172,7 +177,7 @@ if uploaded_excel and uploaded_db:
                 progress_bar.progress((idx+1)/len(sheet_names))
 
             st.session_state.processed_sheets = processed
-            st.success("🎉 Semua sheet selesai diproses.")
+            st.success("✔️Semua sheet selesai diproses.")
 
     if st.session_state.processed_sheets:
         st.subheader("📋 Sheet yang sudah diproses:")
@@ -209,34 +214,5 @@ if uploaded_excel and uploaded_db:
                     file_name=zip_filename,
                     mime="application/zip"
                 )
-
-# Footer dengan info author dan GitHub
-st.markdown("""
-<style>
-.footer {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    background-color: #f1f1f1;
-    color: #555;
-    text-align: center;
-    padding: 5px 0;
-    font-size: 14px;
-    font-family: Arial, sans-serif;
-    border-top: 1px solid #ddd;
-    z-index: 1000;
-}
-.footer a {
-    color: #0366d6;
-    text-decoration: none;
-    font-weight: bold;
-}
-.footer a:hover {
-    text-decoration: underline;
-}
-</style>
-<div class="footer">
-    App Version update: 16.06.2025 | Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
-</div>
-""", unsafe_allow_html=True)
+else:
+    st.info("📂 Silakan upload file Excel terlebih dahulu.")
