@@ -4,16 +4,22 @@ import re
 import math
 import io
 import zipfile
+import os
 
 st.set_page_config(page_title="Automatic tools for Aktivator", layout="wide")
 
-st.title("⚡ Automatic tools for Aktivator")
+st.title("Automatic tools for Aktivator")
 
 uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
 
 # Load database lokal dari folder ./data/database.xlsx
+db_path = "./data/database.xlsx"
+if not os.path.exists(db_path):
+    st.error(f"⚠️ File database lokal tidak ditemukan di path {db_path}")
+    st.stop()
+
 try:
-    db = pd.read_excel("./data/database.xlsx")
+    db = pd.read_excel(db_path)
 except Exception as e:
     st.error(f"⚠️ Gagal membaca database lokal: {e}")
     st.stop()
@@ -44,7 +50,7 @@ def format_decimal_with_koma(s):
 
 batch_size = 1000
 
-# CSS untuk horizontal scroll checkbox
+# CSS untuk horizontal scroll checkbox dan footer
 st.markdown("""
 <style>
 .checkbox-container {
@@ -177,7 +183,7 @@ if uploaded_excel:
                 progress_bar.progress((idx+1)/len(sheet_names))
 
             st.session_state.processed_sheets = processed
-            st.success("✔️Semua sheet selesai diproses.")
+            st.success("🎉 Semua sheet selesai diproses.")
 
     if st.session_state.processed_sheets:
         st.subheader("📋 Sheet yang sudah diproses:")
@@ -216,3 +222,32 @@ if uploaded_excel:
                 )
 else:
     st.info("📂 Silakan upload file Excel terlebih dahulu.")
+
+# Footer dengan info author dan GitHub
+st.markdown("""
+<style>
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: #f1f1f1;
+    color: #555;
+    text-align: center;
+    padding: 5px 0;
+    font-size: 14px;
+    font-family: Arial, sans-serif;
+    border-top: 1px solid #ddd;
+    z-index: 1000;
+}
+.footer a {
+    color: #0366d6;
+    text-decoration: none;
+    font-weight: bold;
+}
+.footer a:hover {
+    text-decoration: underline;
+}
+</style>
+<div class="footer">
+   App Version update: 16.06.2025 | Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4ty
