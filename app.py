@@ -123,8 +123,8 @@ if menu == "Automasi CSV":
 elif menu == "Validasi CSV":
     st.title("Validasi CSV")
     uploaded_csv = st.file_uploader(
-        "Upload file CSV hasil proses untuk validasi", 
-        type=["csv"], 
+        "Upload file CSV hasil proses untuk validasi",
+        type=["csv"],
         accept_multiple_files=True
     )
 
@@ -144,10 +144,8 @@ elif menu == "Validasi CSV":
                 }
                 continue
 
-            # Cek semua angka valid 12 digit
             invalid_numbers = [num for num in csv_numbers if not re.fullmatch(r'\d{12}', num)]
 
-            # Cek duplikat angka
             seen = set()
             duplicates = set()
             for num in csv_numbers:
