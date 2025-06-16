@@ -8,19 +8,18 @@ import os
 
 st.set_page_config(page_title="Automatic tools for Aktivator", layout="wide")
 
-st.title("Automatic tools for Aktivator")
-
-uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
+st.sidebar.title("Menu Navigasi")
+page = st.sidebar.radio("Pilih Halaman:", ["Proses CSV", "Validasi CSV"])
 
 db_path = "./data/database.xlsx"
 if not os.path.exists(db_path):
-    st.error(f"⚠️ File database lokal tidak ditemukan di path {db_path}")
+    st.sidebar.error(f"⚠️ File database lokal tidak ditemukan di path {db_path}")
     st.stop()
 
 try:
     db = pd.read_excel(db_path)
 except Exception as e:
-    st.error(f"⚠️ Gagal membaca database lokal: {e}")
+    st.sidebar.error(f"⚠️ Gagal membaca database lokal: {e}")
     st.stop()
 
 def normalize_text(s):
@@ -49,7 +48,7 @@ def format_decimal_with_koma(s):
 
 batch_size = 1000
 
-# CSS untuk horizontal scroll checkbox dan footer
+# CSS styling
 st.markdown("""
 <style>
 .checkbox-container {
@@ -93,168 +92,168 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-if uploaded_excel:
-    try:
-        xls = pd.ExcelFile(uploaded_excel)
-    except Exception as e:
-        st.error(f"⚠️ Error membaca file Excel: {e}")
-        st.stop()
+if page == "Proses CSV":
+    st.title("Automatic tools for Aktivator - Proses CSV")
+    uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
 
-    sheet_names = xls.sheet_names
+    if uploaded_excel:
+        try:
+            xls = pd.ExcelFile(uploaded_excel)
+        except Exception as e:
+            st.error(f"⚠️ Error membaca file Excel: {e}")
+            st.stop()
 
-    if 'processed_sheets' not in st.session_state:
-        st.session_state.processed_sheets = {}
+        sheet_names = xls.sheet_names
 
-    # Proses semua sheet dan buat CSV batch
-    if st.button("▶️ Proses Semua Sheet"):
-        with st.spinner('⚙️ Memproses semua sheet...'):
-            progress_bar = st.progress(0)
-            processed = {}
-            for idx, sheet_selected in enumerate(sheet_names):
-                df = pd.read_excel(uploaded_excel, sheet_name=sheet_selected, header=None)
-                numbers_12digit = []
-                for _, row in df.iterrows():
-                    for val in row.astype(str):
-                        found = re.findall(r'\b\d{12}\b', val)
-                        if found:
-                            numbers_12digit.extend(found)
-                total_numbers = len(numbers_12digit)
-                if total_numbers == 0:
-                    st.warning(f"⚠️ Tidak ada angka 12 digit ditemukan di sheet **{sheet_selected}**.")
-                    progress_bar.progress((idx+1)/len(sheet_names))
-                    continue
-                num_files = math.ceil(total_numbers / batch_size)
+        if 'processed_sheets' not in st.session_state:
+            st.session_state.processed_sheets = {}
 
-                db['Nama Barang Norm'] = db['Nama Barang'].apply(lambda x: normalize_text(extract_package_name(x)))
-                sheet_norm = normalize_text(extract_package_name(sheet_selected))
-                match_db = db[db['Nama Barang Norm'] == sheet_norm]
+        if st.button("▶️ Proses Semua Sheet"):
+            with st.spinner('⚙️ Memproses semua sheet...'):
+                progress_bar = st.progress(0)
+                processed = {}
+                for idx, sheet_selected in enumerate(sheet_names):
+                    df = pd.read_excel(uploaded_excel, sheet_name=sheet_selected, header=None)
+                    numbers_12digit = []
+                    for _, row in df.iterrows():
+                        for val in row.astype(str):
+                            found = re.findall(r'\b\d{12}\b', val)
+                            if found:
+                                numbers_12digit.extend(found)
+                    total_numbers = len(numbers_12digit)
+                    if total_numbers == 0:
+                        st.warning(f"⚠️ Tidak ada angka 12 digit ditemukan di sheet **{sheet_selected}**.")
+                        progress_bar.progress((idx+1)/len(sheet_names))
+                        continue
+                    num_files = math.ceil(total_numbers / batch_size)
 
-                if not match_db.empty:
-                    harga = match_db.iloc[0]['Harga']
-                    bulk_code = match_db.iloc[0]['bulk']
-                    zona_db = match_db.iloc[0]['Zona']
-                else:
-                    harga = None
-                    bulk_code = 'bulkUnknown'
-                    zona_db = ''
+                    db['Nama Barang Norm'] = db['Nama Barang'].apply(lambda x: normalize_text(extract_package_name(x)))
+                    sheet_norm = normalize_text(extract_package_name(sheet_selected))
+                    match_db = db[db['Nama Barang Norm'] == sheet_norm]
 
-                kuota, hari, zona_sheet = None, None, None
-                pattern_kuota = r'(\d+[\.,]?\d*)\s*gb'
-                kuota_match = re.search(pattern_kuota, sheet_selected, re.IGNORECASE)
-                if kuota_match:
-                    kuota = kuota_match.group(1).replace(',', '.')
-                hari_match = re.search(r'(\d+)\s*h', sheet_selected, re.IGNORECASE)
-                if hari_match:
-                    hari = hari_match.group(1)
-                zona_match = re.search(r'(z\d+)', sheet_selected, re.IGNORECASE)
-                if zona_match:
-                    zona_sheet = zona_match.group(1).lower()
-
-                zona = zona_db if zona_db and str(zona_db).strip() != '-' and str(zona_db).strip() != '' else (zona_sheet if zona_sheet else '')
-
-                kuota_text_raw = f"{kuota}gb" if kuota else "unknowngb"
-                kuota_text = format_decimal_with_koma(kuota_text_raw)
-
-                bulk_text_raw = bulk_code.replace(' ', '')
-                bulk_text = format_decimal_with_koma(bulk_text_raw)
-
-                files_buffers = []
-
-                for i in range(num_files):
-                    batch_numbers = numbers_12digit[i*batch_size:(i+1)*batch_size]
-                    qty = len(batch_numbers)
-                    file_index = i + 1
-
-                    hari_raw = f"{hari}h" if hari else "unknownhari"
-                    hari_text = re.sub(r'h$', 'hari', hari_raw)
-
-                    if zona:
-                        filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {zona} {qty}.csv"
+                    if not match_db.empty:
+                        harga = match_db.iloc[0]['Harga']
+                        bulk_code = match_db.iloc[0]['bulk']
+                        zona_db = match_db.iloc[0]['Zona']
                     else:
-                        filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
+                        harga = None
+                        bulk_code = 'bulkUnknown'
+                        zona_db = ''
 
-                    buffer = io.BytesIO()
-                    buffer.write('\n'.join(batch_numbers).encode('utf-8'))
-                    buffer.seek(0)
+                    kuota, hari, zona_sheet = None, None, None
+                    pattern_kuota = r'(\d+[\.,]?\d*)\s*gb'
+                    kuota_match = re.search(pattern_kuota, sheet_selected, re.IGNORECASE)
+                    if kuota_match:
+                        kuota = kuota_match.group(1).replace(',', '.')
+                    hari_match = re.search(r'(\d+)\s*h', sheet_selected, re.IGNORECASE)
+                    if hari_match:
+                        hari = hari_match.group(1)
+                    zona_match = re.search(r'(z\d+)', sheet_selected, re.IGNORECASE)
+                    if zona_match:
+                        zona_sheet = zona_match.group(1).lower()
 
-                    files_buffers.append((filename, buffer))
+                    zona = zona_db if zona_db and str(zona_db).strip() != '-' and str(zona_db).strip() != '' else (zona_sheet if zona_sheet else '')
 
-                processed[sheet_selected] = files_buffers
-                progress_bar.progress((idx+1)/len(sheet_names))
+                    kuota_text_raw = f"{kuota}gb" if kuota else "unknowngb"
+                    kuota_text = format_decimal_with_koma(kuota_text_raw)
 
-            st.session_state.processed_sheets = processed
-            st.success("🎉 Semua sheet selesai diproses.")
+                    bulk_text_raw = bulk_code.replace(' ', '')
+                    bulk_text = format_decimal_with_koma(bulk_text_raw)
 
-    # Tampilkan daftar sheet yang sudah diproses dengan checkbox
-    if st.session_state.processed_sheets:
-        st.subheader("📋 Sheet yang sudah diproses:")
-        sheet_list = list(st.session_state.processed_sheets.keys())
+                    files_buffers = []
 
-        st.markdown('<div class="checkbox-container">', unsafe_allow_html=True)
-        selected_sheets = []
-        for sheet in sheet_list:
-            key = f"cb_{sheet}"
-            checked = st.checkbox(sheet, key=key)
-            if checked:
-                selected_sheets.append(sheet)
-            st.markdown('<div class="checkbox-item"></div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+                    for i in range(num_files):
+                        batch_numbers = numbers_12digit[i*batch_size:(i+1)*batch_size]
+                        qty = len(batch_numbers)
+                        file_index = i + 1
 
-        # Tombol download zip dari sheet terpilih
-        if st.button("📦 Download ZIP dari Sheet Terpilih"):
-            if not selected_sheets:
-                st.warning("⚠️ Silakan pilih minimal 1 sheet.")
-            else:
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-                    for sheet_name in selected_sheets:
-                        for filename, buffer in st.session_state.processed_sheets[sheet_name]:
-                            zip_path = f"{sheet_name}/{filename}"
-                            zip_file.writestr(zip_path, buffer.getvalue())
-                zip_buffer.seek(0)
+                        hari_raw = f"{hari}h" if hari else "unknownhari"
+                        hari_text = re.sub(r'h$', 'hari', hari_raw)
 
-                if len(selected_sheets) == len(st.session_state.processed_sheets):
-                    zip_filename = "all sheet.zip"
+                        if zona:
+                            filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {zona} {qty}.csv"
+                        else:
+                            filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
+
+                        buffer = io.BytesIO()
+                        buffer.write('\n'.join(batch_numbers).encode('utf-8'))
+                        buffer.seek(0)
+
+                        files_buffers.append((filename, buffer))
+
+                    processed[sheet_selected] = files_buffers
+                    progress_bar.progress((idx+1)/len(sheet_names))
+
+                st.session_state.processed_sheets = processed
+                st.success("🎉 Semua sheet selesai diproses.")
+
+        if 'processed_sheets' in st.session_state and st.session_state.processed_sheets:
+            st.subheader("📋 Sheet yang sudah diproses:")
+            sheet_list = list(st.session_state.processed_sheets.keys())
+
+            st.markdown('<div class="checkbox-container">', unsafe_allow_html=True)
+            selected_sheets = []
+            for sheet in sheet_list:
+                key = f"cb_{sheet}"
+                checked = st.checkbox(sheet, key=key)
+                if checked:
+                    selected_sheets.append(sheet)
+                st.markdown('<div class="checkbox-item"></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            if st.button("📦 Download ZIP dari Sheet Terpilih"):
+                if not selected_sheets:
+                    st.warning("⚠️ Silakan pilih minimal 1 sheet.")
                 else:
-                    zip_filename = f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+                        for sheet_name in selected_sheets:
+                            for filename, buffer in st.session_state.processed_sheets[sheet_name]:
+                                zip_path = f"{sheet_name}/{filename}"
+                                zip_file.writestr(zip_path, buffer.getvalue())
+                    zip_buffer.seek(0)
 
-                st.download_button(
-                    label="📥 Download ZIP",
-                    data=zip_buffer,
-                    file_name=zip_filename,
-                    mime="application/zip"
-                )
+                    if len(selected_sheets) == len(st.session_state.processed_sheets):
+                        zip_filename = "all sheet.zip"
+                    else:
+                        zip_filename = f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
 
-        # === FITUR VALIDASI CSV ===
-        st.subheader("🔍 Validasi File CSV Hasil Download")
+                    st.download_button(
+                        label="📥 Download ZIP",
+                        data=zip_buffer,
+                        file_name=zip_filename,
+                        mime="application/zip"
+                    )
 
-        uploaded_csv = st.file_uploader("Upload file CSV hasil download", type=["csv"])
+elif page == "Validasi CSV":
+    st.title("Automatic tools for Aktivator - Validasi CSV")
 
-        sheet_for_validation = st.selectbox("Pilih sheet untuk validasi", sheet_list if sheet_list else [])
+    uploaded_csv = st.file_uploader("Upload file CSV hasil download", type=["csv"])
 
-        if uploaded_csv and sheet_for_validation:
-            try:
-                csv_content = pd.read_csv(uploaded_csv, header=None)
-                df_sheet = pd.read_excel(uploaded_excel, sheet_name=sheet_for_validation, header=None)
-            except Exception as e:
-                st.error(f"⚠️ Error membaca file: {e}")
+    # Pilih sheet dari yang sudah diproses atau dari Excel
+    sheet_options = list(st.session_state.processed_sheets.keys()) if 'processed_sheets' in st.session_state else []
+    sheet_for_validation = st.selectbox("Pilih sheet untuk validasi", sheet_options)
+
+    if uploaded_csv and sheet_for_validation and uploaded_excel:
+        try:
+            csv_content = pd.read_csv(uploaded_csv, header=None)
+            df_sheet = pd.read_excel(uploaded_excel, sheet_name=sheet_for_validation, header=None)
+        except Exception as e:
+            st.error(f"⚠️ Error membaca file: {e}")
+        else:
+            numbers_12digit_sheet = []
+            for _, row in df_sheet.iterrows():
+                for val in row.astype(str):
+                    found = re.findall(r'\b\d{12}\b', val)
+                    if found:
+                        numbers_12digit_sheet.extend(found)
+
+            numbers_12digit_csv = csv_content[0].astype(str).tolist()
+
+            if sorted(numbers_12digit_csv) == sorted(numbers_12digit_sheet):
+                st.success("✅ File CSV valid dan sesuai dengan sheet Excel.")
             else:
-                numbers_12digit_sheet = []
-                for _, row in df_sheet.iterrows():
-                    for val in row.astype(str):
-                        found = re.findall(r'\b\d{12}\b', val)
-                        if found:
-                            numbers_12digit_sheet.extend(found)
-
-                numbers_12digit_csv = csv_content[0].astype(str).tolist()
-
-                if sorted(numbers_12digit_csv) == sorted(numbers_12digit_sheet):
-                    st.success("✅ File CSV valid dan sesuai dengan sheet Excel.")
-                else:
-                    st.error("❌ File CSV tidak cocok dengan sheet Excel.")
-
-else:
-    st.info("📂 Silakan upload file Excel terlebih dahulu.")
+                st.error("❌ File CSV tidak cocok dengan sheet Excel.")
 
 # Footer dengan info author dan GitHub
 st.markdown("""
