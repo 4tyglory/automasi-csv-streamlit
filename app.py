@@ -4,106 +4,39 @@ import re
 import math
 import io
 import zipfile
-import os
 
-st.set_page_config(page_title="Automatic tools for Aktivator", layout="wide")
+def extract_12digit_numbers(df):
+    numbers = []
+    for _, row in df.iterrows():
+        for val in row.astype(str):
+            found = re.findall(r'\b\d{12}\b', val)
+            if found:
+                numbers.extend(found)
+    return numbers
 
-st.sidebar.title("Menu Navigasi")
-page = st.sidebar.radio("Pilih Halaman:", ["Proses CSV", "Validasi CSV"])
+def check_duplicates(lst):
+    seen = set()
+    duplicates = set()
+    for x in lst:
+        if x in seen:
+            duplicates.add(x)
+        else:
+            seen.add(x)
+    return duplicates
 
-db_path = "./data/database.xlsx"
-if not os.path.exists(db_path):
-    st.sidebar.error(f"⚠️ File database lokal tidak ditemukan di path {db_path}")
-    st.stop()
+st.set_page_config(page_title="Automation & Validation CSV", layout="wide")
+st.sidebar.title("Menu")
+menu = st.sidebar.radio("Pilih menu:", ["Automasi CSV", "Validasi CSV"])
 
-try:
-    db = pd.read_excel(db_path)
-except Exception as e:
-    st.sidebar.error(f"⚠️ Gagal membaca database lokal: {e}")
-    st.stop()
-
-def normalize_text(s):
-    if not isinstance(s, str):
-        s = str(s)
-    s = s.lower().replace('.', ',').replace(' ', '')
-    return s
-
-def extract_package_name(sheet_name):
-    pattern = r'(\d+[\.,]?\d*\s*gb)\s*(\d+\s*(h|hari))\s*(z\d+)'
-    match = re.search(pattern, sheet_name, re.IGNORECASE)
-    if match:
-        kuota = match.group(1).replace(',', '.').lower()
-        hari_num = re.findall(r'\d+', match.group(2))[0]
-        hari = f"{hari_num}h"
-        zona = match.group(4).lower()
-        return f"{kuota} {hari} {zona}"
-    else:
-        return sheet_name.lower()
-
-def format_decimal_with_koma(s):
-    s = s.lower()
-    if '.' in s:
-        s = s.replace('.', 'koma')
-    return s
-
-batch_size = 1000
-
-# CSS styling
-st.markdown("""
-<style>
-.checkbox-container {
-    display: flex;
-    overflow-x: auto;
-    white-space: nowrap;
-    padding: 10px 0;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-}
-.checkbox-item {
-    flex: 0 0 auto;
-    margin-right: 25px;
-    padding: 5px 10px;
-    background-color: #f5f5f5;
-    border-radius: 6px;
-    user-select: none;
-}
-.footer {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    background-color: #f1f1f1;
-    color: #555;
-    text-align: center;
-    padding: 5px 0;
-    font-size: 14px;
-    font-family: Arial, sans-serif;
-    border-top: 1px solid #ddd;
-    z-index: 1000;
-}
-.footer a {
-    color: #0366d6;
-    text-decoration: none;
-    font-weight: bold;
-}
-.footer a:hover {
-    text-decoration: underline;
-}
-</style>
-""", unsafe_allow_html=True)
-
-if page == "Proses CSV":
-    st.title("Automatic tools for Aktivator - Proses CSV")
-    uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
-
+if menu == "Automasi CSV":
+    st.title("Automasi CSV")
+    uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
     if uploaded_excel:
-        try:
-            xls = pd.ExcelFile(uploaded_excel)
-        except Exception as e:
-            st.error(f"⚠️ Error membaca file Excel: {e}")
-            st.stop()
-
+        xls = pd.ExcelFile(uploaded_excel)
         sheet_names = xls.sheet_names
+        st.write(f"File Excel berisi sheet: {sheet_names}")
+
+        batch_size = 1000
 
         if 'processed_sheets' not in st.session_state:
             st.session_state.processed_sheets = {}
@@ -127,53 +60,13 @@ if page == "Proses CSV":
                         continue
                     num_files = math.ceil(total_numbers / batch_size)
 
-                    db['Nama Barang Norm'] = db['Nama Barang'].apply(lambda x: normalize_text(extract_package_name(x)))
-                    sheet_norm = normalize_text(extract_package_name(sheet_selected))
-                    match_db = db[db['Nama Barang Norm'] == sheet_norm]
-
-                    if not match_db.empty:
-                        harga = match_db.iloc[0]['Harga']
-                        bulk_code = match_db.iloc[0]['bulk']
-                        zona_db = match_db.iloc[0]['Zona']
-                    else:
-                        harga = None
-                        bulk_code = 'bulkUnknown'
-                        zona_db = ''
-
-                    kuota, hari, zona_sheet = None, None, None
-                    pattern_kuota = r'(\d+[\.,]?\d*)\s*gb'
-                    kuota_match = re.search(pattern_kuota, sheet_selected, re.IGNORECASE)
-                    if kuota_match:
-                        kuota = kuota_match.group(1).replace(',', '.')
-                    hari_match = re.search(r'(\d+)\s*h', sheet_selected, re.IGNORECASE)
-                    if hari_match:
-                        hari = hari_match.group(1)
-                    zona_match = re.search(r'(z\d+)', sheet_selected, re.IGNORECASE)
-                    if zona_match:
-                        zona_sheet = zona_match.group(1).lower()
-
-                    zona = zona_db if zona_db and str(zona_db).strip() != '-' and str(zona_db).strip() != '' else (zona_sheet if zona_sheet else '')
-
-                    kuota_text_raw = f"{kuota}gb" if kuota else "unknowngb"
-                    kuota_text = format_decimal_with_koma(kuota_text_raw)
-
-                    bulk_text_raw = bulk_code.replace(' ', '')
-                    bulk_text = format_decimal_with_koma(bulk_text_raw)
-
                     files_buffers = []
-
                     for i in range(num_files):
                         batch_numbers = numbers_12digit[i*batch_size:(i+1)*batch_size]
                         qty = len(batch_numbers)
                         file_index = i + 1
 
-                        hari_raw = f"{hari}h" if hari else "unknownhari"
-                        hari_text = re.sub(r'h$', 'hari', hari_raw)
-
-                        if zona:
-                            filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {zona} {qty}.csv"
-                        else:
-                            filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
+                        filename = f"{file_index}_{sheet_selected}_{qty}.csv"
 
                         buffer = io.BytesIO()
                         buffer.write('\n'.join(batch_numbers).encode('utf-8'))
@@ -191,14 +84,14 @@ if page == "Proses CSV":
             st.subheader("📋 Sheet yang sudah diproses:")
             sheet_list = list(st.session_state.processed_sheets.keys())
 
-            st.markdown('<div class="checkbox-container">', unsafe_allow_html=True)
+            st.markdown('<div style="display:flex; overflow-x:auto; white-space:nowrap; padding:10px 0; border:1px solid #ddd; border-radius:8px;">', unsafe_allow_html=True)
             selected_sheets = []
             for sheet in sheet_list:
                 key = f"cb_{sheet}"
                 checked = st.checkbox(sheet, key=key)
                 if checked:
                     selected_sheets.append(sheet)
-                st.markdown('<div class="checkbox-item"></div>', unsafe_allow_html=True)
+                st.markdown('<div style="flex:0 0 auto; margin-right:25px; padding:5px 10px; background:#f5f5f5; border-radius:6px;"></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             if st.button("📦 Download ZIP dari Sheet Terpilih"):
@@ -224,64 +117,73 @@ if page == "Proses CSV":
                         file_name=zip_filename,
                         mime="application/zip"
                     )
+    else:
+        st.info("Silakan upload file Excel terlebih dahulu.")
 
-elif page == "Validasi CSV":
-    st.title("Automatic tools for Aktivator - Validasi CSV")
+elif menu == "Validasi CSV":
+    st.title("Validasi CSV")
+    uploaded_excel = st.file_uploader("Upload file Excel asli (.xlsx) untuk validasi", type=["xlsx"])
+    uploaded_csv = st.file_uploader("Upload file CSV hasil proses untuk validasi", type=["csv"], accept_multiple_files=True)
 
-    uploaded_csv = st.file_uploader("Upload file CSV hasil download", type=["csv"])
-
-    # Pilih sheet dari yang sudah diproses atau dari Excel
-    sheet_options = list(st.session_state.processed_sheets.keys()) if 'processed_sheets' in st.session_state else []
-    sheet_for_validation = st.selectbox("Pilih sheet untuk validasi", sheet_options)
-
-    if uploaded_csv and sheet_for_validation and uploaded_excel:
+    if uploaded_excel and uploaded_csv:
         try:
-            csv_content = pd.read_csv(uploaded_csv, header=None)
-            df_sheet = pd.read_excel(uploaded_excel, sheet_name=sheet_for_validation, header=None)
+            xls = pd.ExcelFile(uploaded_excel)
+            excel_sheets = xls.sheet_names
         except Exception as e:
-            st.error(f"⚠️ Error membaca file: {e}")
-        else:
-            numbers_12digit_sheet = []
-            for _, row in df_sheet.iterrows():
-                for val in row.astype(str):
-                    found = re.findall(r'\b\d{12}\b', val)
-                    if found:
-                        numbers_12digit_sheet.extend(found)
+            st.error(f"Error baca file Excel: {e}")
+            st.stop()
 
-            numbers_12digit_csv = csv_content[0].astype(str).tolist()
+        validation_results = {}
 
-            if sorted(numbers_12digit_csv) == sorted(numbers_12digit_sheet):
-                st.success("✅ File CSV valid dan sesuai dengan sheet Excel.")
+        for csv_file in uploaded_csv:
+            filename = csv_file.name.lower()
+            matched_sheet = None
+            for sheet in excel_sheets:
+                if sheet.lower() in filename:
+                    matched_sheet = sheet
+                    break
+            if not matched_sheet:
+                validation_results[filename] = {"valid": False, "reason": "Sheet tidak ditemukan di Excel"}
+                continue
+
+            try:
+                df_csv = pd.read_csv(csv_file, header=None)
+                df_excel = pd.read_excel(uploaded_excel, sheet_name=matched_sheet, header=None)
+            except Exception as e:
+                validation_results[filename] = {"valid": False, "reason": f"Gagal baca file: {e}"}
+                continue
+
+            excel_numbers = extract_12digit_numbers(df_excel)
+            csv_numbers = df_csv[0].astype(str).tolist()
+
+            jumlah_sama = (len(excel_numbers) == len(csv_numbers))
+            angka_sama = (sorted(excel_numbers) == sorted(csv_numbers))
+
+            dup_excel = check_duplicates(excel_numbers)
+            dup_csv = check_duplicates(csv_numbers)
+            dup_sama = (dup_excel == dup_csv)
+
+            valid = (jumlah_sama and angka_sama and dup_sama)
+
+            reason = []
+            if not jumlah_sama:
+                reason.append("Jumlah angka berbeda")
+            if not angka_sama:
+                reason.append("Angka tidak cocok")
+            if not dup_sama:
+                reason.append("Duplikat angka berbeda")
+
+            validation_results[matched_sheet] = {
+                "valid": valid,
+                "reason": "; ".join(reason) if reason else "Valid"
+            }
+
+        st.write("### Hasil Validasi")
+        for sheet_name, res in validation_results.items():
+            if res["valid"]:
+                st.success(f"✅ {sheet_name}: {res['reason']}")
             else:
-                st.error("❌ File CSV tidak cocok dengan sheet Excel.")
+                st.error(f"⚠️ {sheet_name}: {res['reason']}")
 
-# Footer dengan info author dan GitHub
-st.markdown("""
-<style>
-.footer {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    background-color: #f1f1f1;
-    color: #555;
-    text-align: center;
-    padding: 5px 0;
-    font-size: 14px;
-    font-family: Arial, sans-serif;
-    border-top: 1px solid #ddd;
-    z-index: 1000;
-}
-.footer a {
-    color: #0366d6;
-    text-decoration: none;
-    font-weight: bold;
-}
-.footer a:hover {
-    text-decoration: underline;
-}
-</style>
-<div class="footer">
-    Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
-</div>
-""", unsafe_allow_html=True)
+    else:
+        st.info("Silakan upload file Excel asli dan minimal satu file CSV hasil proses.")
