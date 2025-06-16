@@ -121,48 +121,72 @@ if menu == "Automasi CSV":
         st.info("Silakan upload file Excel terlebih dahulu.")
 
 elif menu == "Validasi CSV":
-    st.title("Validasi CSV - Debug Mode")
+    st.title("Validasi CSV")
 
-    uploaded_csv = st.file_uploader(
-        "Upload file CSV untuk validasi",
-        type=["csv"],
-        accept_multiple_files=True
-    )
+    uploaded_excel = st.file_uploader("Upload file Excel asli (.xlsx) untuk validasi", type=["xlsx"])
+    uploaded_csv = st.file_uploader("Upload file CSV hasil proses untuk validasi", type=["csv"], accept_multiple_files=True)
 
-    if uploaded_csv:
+    if uploaded_excel and uploaded_csv:
+        try:
+            xls = pd.ExcelFile(uploaded_excel)
+            excel_sheets = xls.sheet_names
+        except Exception as e:
+            st.error(f"Error baca file Excel: {e}")
+            st.stop()
+
+        validation_results = {}
+
         for csv_file in uploaded_csv:
-            st.write(f"### Preview: {csv_file.name}")
-            try:
-                df_csv = pd.read_csv(csv_file, header=None)
-                st.dataframe(df_csv.head())
-            except Exception as e:
-                st.error(f"Error baca CSV: {e}")
+            filename = csv_file.name.lower()
+
+            # Cari sheet terkait dari nama file CSV (asumsi nama sheet ada di nama file)
+            matched_sheet = None
+            for sheet in excel_sheets:
+                if sheet.lower() in filename:
+                    matched_sheet = sheet
+                    break
+            if not matched_sheet:
+                validation_results[filename] = {"valid": False, "reason": "Sheet terkait tidak ditemukan di Excel"}
                 continue
 
+            try:
+                df_csv = pd.read_csv(csv_file, header=None)
+                df_excel = pd.read_excel(uploaded_excel, sheet_name=matched_sheet, header=None)
+            except Exception as e:
+                validation_results[filename] = {"valid": False, "reason": f"Gagal baca file: {e}"}
+                continue
+
+            excel_numbers = set(extract_12digit_numbers(df_excel))
             csv_numbers = df_csv[0].astype(str).tolist()
 
-            invalid_numbers = [num for num in csv_numbers if not re.fullmatch(r'\d{12}', num)]
+            # Cek semua angka CSV ada di angka Excel (subset)
+            not_in_excel = [num for num in csv_numbers if num not in excel_numbers]
 
-            seen = set()
-            duplicates = set()
-            for num in csv_numbers:
-                if num in seen:
-                    duplicates.add(num)
-                else:
-                    seen.add(num)
+            # Cek duplikat CSV
+            duplicates = check_duplicates(csv_numbers)
 
-            if invalid_numbers:
-                st.error(f"❌ Angka tidak valid (bukan 12 digit): {invalid_numbers}")
+            angka_valid = (len(not_in_excel) == 0)
+            duplikat_valid = (len(duplicates) == 0)
+
+            reason = []
+            if not angka_valid:
+                reason.append(f"Ada angka di CSV yang tidak ada di Excel: {not_in_excel}")
+            if not duplikat_valid:
+                reason.append(f"Ada duplikat angka di CSV: {list(duplicates)}")
+
+            validation_results[matched_sheet] = {
+                "valid": angka_valid and duplikat_valid,
+                "reason": "; ".join(reason) if reason else "Valid"
+            }
+
+        st.write("### Hasil Validasi")
+        for sheet_name, res in validation_results.items():
+            if res["valid"]:
+                st.success(f"✅ {sheet_name}: {res['reason']}")
             else:
-                st.success("✅ Semua angka valid 12 digit")
-
-            if duplicates:
-                st.warning(f"⚠️ Terdapat angka duplikat: {list(duplicates)}")
-            else:
-                st.success("✅ Tidak ada angka duplikat")
-
+                st.error(f"❌ {sheet_name}: {res['reason']}")
     else:
-        st.info("Silakan upload minimal satu file CSV untuk validasi.")
+        st.info("Silakan upload file Excel asli dan minimal satu file CSV hasil proses.")
 
 # Footer
 st.markdown("""
