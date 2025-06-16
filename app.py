@@ -12,7 +12,7 @@ st.title("Automatic tools for Aktivator")
 
 uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
 
-db_path = "F:/Aktivasi/Untuk Upload Data/Lembar kerja/database.xlsx"
+db_path = "./data/database.xlsx"
 if not os.path.exists(db_path):
     st.error(f"⚠️ File database lokal tidak ditemukan di path {db_path}")
     st.stop()
