@@ -122,75 +122,60 @@ if menu == "Automasi CSV":
 
 elif menu == "Validasi CSV":
     st.title("Validasi CSV")
-    uploaded_excel = st.file_uploader("Upload file Excel asli (.xlsx) untuk validasi", type=["xlsx"])
-    uploaded_csv = st.file_uploader("Upload file CSV hasil proses untuk validasi", type=["csv"], accept_multiple_files=True)
+    uploaded_csv = st.file_uploader(
+        "Upload file CSV hasil proses untuk validasi", 
+        type=["csv"], 
+        accept_multiple_files=True
+    )
 
-    excel_sheets = []
-    if uploaded_excel:
-        try:
-            xls = pd.ExcelFile(uploaded_excel)
-            excel_sheets = xls.sheet_names
-        except Exception as e:
-            st.error(f"Error baca file Excel: {e}")
-            st.stop()
-
-    sheet_for_validation = st.selectbox("Pilih sheet untuk validasi", excel_sheets)
-
-    if uploaded_excel and uploaded_csv and sheet_for_validation:
+    if uploaded_csv:
         validation_results = {}
 
         for csv_file in uploaded_csv:
-            filename = csv_file.name.lower()
-            matched_sheet = None
-            for sheet in excel_sheets:
-                if sheet.lower() in filename:
-                    matched_sheet = sheet
-                    break
-            if not matched_sheet:
-                validation_results[filename] = {"valid": False, "reason": "Sheet tidak ditemukan di Excel"}
-                continue
+            filename = csv_file.name
 
             try:
                 df_csv = pd.read_csv(csv_file, header=None)
-                df_excel = pd.read_excel(uploaded_excel, sheet_name=matched_sheet, header=None)
+                csv_numbers = df_csv[0].astype(str).tolist()
             except Exception as e:
-                validation_results[filename] = {"valid": False, "reason": f"Gagal baca file: {e}"}
+                validation_results[filename] = {
+                    "valid": False,
+                    "reason": f"Gagal baca file CSV: {e}"
+                }
                 continue
 
-            excel_numbers = extract_12digit_numbers(df_excel)
-            csv_numbers = df_csv[0].astype(str).tolist()
+            # Cek semua angka valid 12 digit
+            invalid_numbers = [num for num in csv_numbers if not re.fullmatch(r'\d{12}', num)]
 
-            jumlah_sama = (len(excel_numbers) == len(csv_numbers))
-            angka_sama = (sorted(excel_numbers) == sorted(csv_numbers))
+            # Cek duplikat angka
+            seen = set()
+            duplicates = set()
+            for num in csv_numbers:
+                if num in seen:
+                    duplicates.add(num)
+                else:
+                    seen.add(num)
 
-            dup_excel = check_duplicates(excel_numbers)
-            dup_csv = check_duplicates(csv_numbers)
-            dup_sama = (dup_excel == dup_csv)
-
-            valid = (jumlah_sama and angka_sama and dup_sama)
-
-            reason = []
-            if not jumlah_sama:
-                reason.append("Jumlah angka berbeda")
-            if not angka_sama:
-                reason.append("Angka tidak cocok")
-            if not dup_sama:
-                reason.append("Duplikat angka berbeda")
-
-            validation_results[matched_sheet] = {
-                "valid": valid,
-                "reason": "; ".join(reason) if reason else "Valid"
-            }
-
-        st.write("### Hasil Validasi")
-        for sheet_name, res in validation_results.items():
-            if res["valid"]:
-                st.success(f"✅ {sheet_name}: {res['reason']}")
+            if invalid_numbers:
+                reason = f"Ada angka tidak valid (bukan 12 digit): {', '.join(invalid_numbers)}"
+                valid = False
+            elif duplicates:
+                reason = f"Ada angka duplikat: {', '.join(duplicates)}"
+                valid = False
             else:
-                st.error(f"⚠️ {sheet_name}: {res['reason']}")
+                reason = "Valid: Semua angka 12 digit dan tanpa duplikat"
+                valid = True
 
+            validation_results[filename] = {"valid": valid, "reason": reason}
+
+        st.write("### Hasil Validasi CSV")
+        for fname, res in validation_results.items():
+            if res["valid"]:
+                st.success(f"✅ {fname}: {res['reason']}")
+            else:
+                st.error(f"⚠️ {fname}: {res['reason']}")
     else:
-        st.info("Silakan upload file Excel asli dan minimal satu file CSV hasil proses.")
+        st.info("Silakan upload minimal satu file CSV untuk validasi.")
 
 # Footer
 st.markdown("""
