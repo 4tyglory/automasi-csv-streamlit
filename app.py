@@ -6,8 +6,7 @@ import io
 import zipfile
 
 st.set_page_config(page_title="Automasi CSV Multi Sheet", layout="wide")
-
-st.title("🚀 Automasi CSV Multi Sheet dengan Pilihan Download")
+st.title("🚀 Automasi CSV Multi Sheet dengan Checkbox Horizontal")
 
 uploaded_excel = st.file_uploader("📥 Upload file Excel (.xlsx)", type=["xlsx"])
 uploaded_db = st.file_uploader("📥 Upload file Database (.xlsx)", type=["xlsx"])
@@ -36,27 +35,29 @@ def format_decimal_with_koma(s):
         s = s.replace('.', 'koma')
     return s
 
-def render_sheet_cards(sheet_list, cols_per_row=3):
-    rows = [sheet_list[i:i + cols_per_row] for i in range(0, len(sheet_list), cols_per_row)]
-    for row_sheets in rows:
-        cols = st.columns(len(row_sheets))
-        for col, sheet_name in zip(cols, row_sheets):
-            box_html = f"""
-            <div style="
-                border: 1px solid #ccc; 
-                padding: 10px; 
-                margin: 5px; 
-                border-radius: 8px; 
-                background-color: #f9f9f9; 
-                text-align: center;
-                font-weight: bold;
-                ">
-                {sheet_name}
-            </div>
-            """
-            col.markdown(box_html, unsafe_allow_html=True)
-
 batch_size = 1000
+
+# CSS untuk horizontal scroll checkbox
+st.markdown("""
+<style>
+.checkbox-container {
+    display: flex;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+.checkbox-item {
+    flex: 0 0 auto;
+    margin-right: 25px;
+    padding: 5px 10px;
+    background-color: #f5f5f5;
+    border-radius: 6px;
+    user-select: none;
+}
+</style>
+""", unsafe_allow_html=True)
 
 if uploaded_excel and uploaded_db:
     try:
@@ -152,14 +153,18 @@ if uploaded_excel and uploaded_db:
 
     if st.session_state.processed_sheets:
         st.subheader("📋 Sheet yang sudah diproses:")
-        render_sheet_cards(list(st.session_state.processed_sheets.keys()), cols_per_row=3)
+        sheet_list = list(st.session_state.processed_sheets.keys())
 
-        st.subheader("✅ Pilih sheet untuk download hasil CSV:")
-        selected_sheets = st.multiselect(
-            "Centang sheet yang ingin di-download:",
-            options=list(st.session_state.processed_sheets.keys()),
-            default=list(st.session_state.processed_sheets.keys())
-        )
+        # Container dengan class checkbox-container
+        st.markdown('<div class="checkbox-container">', unsafe_allow_html=True)
+        selected_sheets = []
+        for sheet in sheet_list:
+            key = f"cb_{sheet}"
+            checked = st.checkbox(sheet, key=key)
+            if checked:
+                selected_sheets.append(sheet)
+            st.markdown('<div class="checkbox-item"></div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
         if st.button("📦 Download ZIP dari Sheet Terpilih"):
             if not selected_sheets:
