@@ -237,6 +237,6 @@ st.markdown("""
 }
 </style>
 <div class="footer">
-    Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
+    App Version update: 16.06.2025 | Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
 </div>
 """, unsafe_allow_html=True)
