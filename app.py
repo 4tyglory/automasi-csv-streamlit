@@ -5,6 +5,25 @@ import math
 import io
 import zipfile
 
+def extract_12digit_numbers(df):
+    numbers = []
+    for _, row in df.iterrows():
+        for val in row.astype(str):
+            found = re.findall(r'\b\d{12}\b', val)
+            if found:
+                numbers.extend(found)
+    return numbers
+
+def find_duplicates(numbers):
+    seen = set()
+    duplicates = set()
+    for num in numbers:
+        if num in seen:
+            duplicates.add(num)
+        else:
+            seen.add(num)
+    return duplicates
+
 def format_decimal_with_koma(s: str) -> str:
     return s.lower().replace('.', 'koma')
 
@@ -49,7 +68,7 @@ def buat_nama_file(file_index, sheet_name, qty, bulk_text):
 
     return filename
 
-st.title("Automasi CSV Multi Sheet dengan Penamaan File Khusus")
+st.title("Automasi CSV Multi Sheet dengan Penamaan File Khusus dan Pengecekan Duplikat")
 
 uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
 
@@ -62,12 +81,11 @@ if uploaded_excel:
     if 'processed_sheets' not in st.session_state:
         st.session_state.processed_sheets = {}
 
-    # Simulasi database bulk per sheet, bisa diganti sesuai database asli
     contoh_database_bulk = {
         "2.5 GB 5H Z3": "bulk10.9K",
         "3 GB 5H Z3": "bulk12K",
         "4 GB 7H Z3": "bulk18K",
-        # tambah sesuai kebutuhan
+        # Tambahkan sesuai database asli
     }
 
     if st.button("▶️ Proses Semua Sheet"):
@@ -76,17 +94,19 @@ if uploaded_excel:
             processed = {}
             for idx, sheet_selected in enumerate(sheet_names):
                 df = pd.read_excel(uploaded_excel, sheet_name=sheet_selected, header=None)
-                numbers_12digit = []
-                for _, row in df.iterrows():
-                    for val in row.astype(str):
-                        found = re.findall(r'\b\d{12}\b', val)
-                        if found:
-                            numbers_12digit.extend(found)
+                numbers_12digit = extract_12digit_numbers(df)
                 total_numbers = len(numbers_12digit)
                 if total_numbers == 0:
                     st.warning(f"⚠️ Tidak ada angka 12 digit ditemukan di sheet **{sheet_selected}**.")
                     progress_bar.progress((idx+1)/len(sheet_names))
                     continue
+
+                duplicates = find_duplicates(numbers_12digit)
+                if duplicates:
+                    st.warning(f"⚠️ Sheet **{sheet_selected}** ditemukan angka duplikat: {', '.join(sorted(duplicates))}")
+                else:
+                    st.success(f"✅ Sheet **{sheet_selected}** tidak mengandung duplikat angka.")
+
                 num_files = math.ceil(total_numbers / batch_size)
 
                 bulk_text = contoh_database_bulk.get(sheet_selected, "bulkUnknown")
@@ -150,3 +170,34 @@ if uploaded_excel:
                 )
 else:
     st.info("Silakan upload file Excel terlebih dahulu.")
+
+# Footer
+st.markdown("""
+<style>
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: #f1f1f1;
+    color: #555;
+    text-align: center;
+    padding: 5px 0;
+    font-size: 14px;
+    font-family: Arial, sans-serif;
+    border-top: 1px solid #ddd;
+    z-index: 1000;
+}
+.footer a {
+    color: #0366d6;
+    text-decoration: none;
+    font-weight: bold;
+}
+.footer a:hover {
+    text-decoration: underline;
+}
+</style>
+<div class="footer">
+    Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
+</div>
+""", unsafe_allow_html=True)
