@@ -5,38 +5,70 @@ import math
 import io
 import zipfile
 
-def extract_12digit_numbers(df):
-    numbers = []
-    for _, row in df.iterrows():
-        for val in row.astype(str):
-            found = re.findall(r'\b\d{12}\b', val)
-            if found:
-                numbers.extend(found)
-    return numbers
+def format_decimal_with_koma(s: str) -> str:
+    return s.lower().replace('.', 'koma')
 
-def check_duplicates(lst):
-    seen = set()
-    duplicates = []
-    for x in lst:
-        if x in seen:
-            duplicates.append(x)
-        else:
-            seen.add(x)
-    return duplicates
+def parse_sheet_name(sheet_name: str):
+    kuota = None
+    hari = None
+    zona = None
 
-st.set_page_config(page_title="Automasi CSV Excel", layout="wide")
-st.title("Automasi CSV Multi Sheet dengan Pilihan Download")
+    kuota_match = re.search(r'(\d+[\.,]?\d*)\s*gb', sheet_name, re.IGNORECASE)
+    if kuota_match:
+        kuota = kuota_match.group(1).replace(',', '.').replace(' ', '')
+
+    hari_match = re.search(r'(\d+)\s*h', sheet_name, re.IGNORECASE)
+    if hari_match:
+        hari = hari_match.group(1)
+
+    zona_match = re.search(r'(z\d+)', sheet_name, re.IGNORECASE)
+    if zona_match:
+        zona = zona_match.group(1).lower()
+
+    return kuota, hari, zona
+
+def buat_nama_file(file_index, sheet_name, qty, bulk_text):
+    kuota, hari, zona = parse_sheet_name(sheet_name)
+    if kuota:
+        kuota_text = format_decimal_with_koma(f"{kuota}gb")
+    else:
+        kuota_text = "unknowngb"
+
+    if bulk_text:
+        bulk_text = bulk_text.replace(" ", "")
+        bulk_text = format_decimal_with_koma(bulk_text)
+    else:
+        bulk_text = "bulkUnknown"
+
+    hari_text = f"{hari}hari" if hari else "unknownhari"
+
+    if zona:
+        filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {zona} {qty}.csv"
+    else:
+        filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
+
+    return filename
+
+st.title("Automasi CSV Multi Sheet dengan Penamaan File Khusus")
 
 uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
+
 if uploaded_excel:
     xls = pd.ExcelFile(uploaded_excel)
     sheet_names = xls.sheet_names
-    st.write(f"File Excel berisi sheet: {sheet_names}")
 
     batch_size = 1000
 
     if 'processed_sheets' not in st.session_state:
         st.session_state.processed_sheets = {}
+
+    # Simulasi database bulk per sheet, bisa diganti sesuai database asli
+    contoh_database_bulk = {
+        "2.5 GB 5H Z3": "bulk10.9K",
+        "3 GB 5H Z3": "bulk12K",
+        "4 GB 7H Z3": "bulk18K",
+        # tambah sesuai kebutuhan
+    }
 
     if st.button("▶️ Proses Semua Sheet"):
         with st.spinner('⚙️ Memproses semua sheet...'):
@@ -44,21 +76,20 @@ if uploaded_excel:
             processed = {}
             for idx, sheet_selected in enumerate(sheet_names):
                 df = pd.read_excel(uploaded_excel, sheet_name=sheet_selected, header=None)
-                numbers_12digit = extract_12digit_numbers(df)
+                numbers_12digit = []
+                for _, row in df.iterrows():
+                    for val in row.astype(str):
+                        found = re.findall(r'\b\d{12}\b', val)
+                        if found:
+                            numbers_12digit.extend(found)
                 total_numbers = len(numbers_12digit)
                 if total_numbers == 0:
                     st.warning(f"⚠️ Tidak ada angka 12 digit ditemukan di sheet **{sheet_selected}**.")
                     progress_bar.progress((idx+1)/len(sheet_names))
                     continue
-
-                # Cek duplikat angka
-                duplicates = check_duplicates(numbers_12digit)
-                if duplicates:
-                    st.warning(f"⚠️ Sheet **{sheet_selected}** mengandung duplikat angka: {set(duplicates)}")
-                else:
-                    st.success(f"✅ Sheet **{sheet_selected}** tidak mengandung duplikat angka.")
-
                 num_files = math.ceil(total_numbers / batch_size)
+
+                bulk_text = contoh_database_bulk.get(sheet_selected, "bulkUnknown")
 
                 files_buffers = []
                 for i in range(num_files):
@@ -66,7 +97,7 @@ if uploaded_excel:
                     qty = len(batch_numbers)
                     file_index = i + 1
 
-                    filename = f"{file_index}_{sheet_selected}_{qty}.csv"
+                    filename = buat_nama_file(file_index, sheet_selected, qty, bulk_text)
 
                     buffer = io.BytesIO()
                     buffer.write('\n'.join(batch_numbers).encode('utf-8'))
@@ -119,34 +150,3 @@ if uploaded_excel:
                 )
 else:
     st.info("Silakan upload file Excel terlebih dahulu.")
-
-# Footer
-st.markdown("""
-<style>
-.footer {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    background-color: #f1f1f1;
-    color: #555;
-    text-align: center;
-    padding: 5px 0;
-    font-size: 14px;
-    font-family: Arial, sans-serif;
-    border-top: 1px solid #ddd;
-    z-index: 1000;
-}
-.footer a {
-    color: #0366d6;
-    text-decoration: none;
-    font-weight: bold;
-}
-.footer a:hover {
-    text-decoration: underline;
-}
-</style>
-<div class="footer">
-    Dibuat oleh: Muhammad Aldi Yusuf | Github: <a href="https://github.com/4tyglory" target="_blank">4tyglory</a>
-</div>
-""", unsafe_allow_html=True)
