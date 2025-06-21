@@ -6,27 +6,38 @@ import io
 import zipfile
 import os
 
-# 1. Fungsi normalisasi & cari bulk sama seperti sebelumnya
-def normalize_sheetname(name):
-    if not isinstance(name, str):
-        name = str(name)
-    name = name.lower()
-    name = re.sub(r'program|hari|\s+', '', name)
-    name = name.replace('.', 'koma')
-    return name
+# ------- Universal Key Extraction --------
+def extract_key(s):
+    """
+    Ambil universal key: '[ANGKA]GB [ANGKA]H Z[ANGKA]'
+    Support: titik/koma, "h" atau "hari", ignore kata tambahan
+    """
+    if not isinstance(s, str):
+        s = str(s)
+    s = s.lower().replace(',', '.')
+    m = re.search(r'(\d+\.?\d*)\s*gb\s*(\d+)\s*(h|hari)?\s*z(\d+)', s)
+    if m:
+        gb = m.group(1)
+        h = m.group(2)
+        z = m.group(4)
+        return f"{gb}gb {h}h z{z}"
+    return s.strip()
 
+# ---------- Load database dari repo ----------
 def load_bulk_database(path='database.xlsx'):
     db = pd.read_excel(path)
-    db['SheetNorm'] = db['Nama Barang'].apply(normalize_sheetname)
+    if 'Nama Barang' not in db.columns or 'bulk' not in db.columns:
+        st.error("Kolom 'Nama Barang' dan/atau 'bulk' tidak ditemukan di database.")
+        return None
+    db['key'] = db['Nama Barang'].apply(extract_key)
     return db
 
 def cari_bulk(sheet_name, db):
-    sheet_norm = normalize_sheetname(sheet_name)
-    row = db[db['SheetNorm'] == sheet_norm]
+    key = extract_key(sheet_name)
+    row = db[db['key'] == key]
     if not row.empty:
         return row.iloc[0]['bulk']
-    else:
-        return "bulkUnknown"
+    return "bulkUnknown"
 
 def extract_12digit_numbers(df):
     numbers = []
@@ -51,24 +62,22 @@ def format_decimal_with_koma(s: str) -> str:
     return s.lower().replace('.', 'koma')
 
 def parse_sheet_name(sheet_name: str):
-    kuota = None
-    hari = None
-    zona = None
-    kuota_match = re.search(r'(\d+[\.,]?\d*)\s*gb', sheet_name, re.IGNORECASE)
-    if kuota_match:
-        kuota = kuota_match.group(1).replace(',', '.').replace(' ', '')
-    hari_match = re.search(r'(\d+)\s*h', sheet_name, re.IGNORECASE)
-    if hari_match:
-        hari = hari_match.group(1)
-    zona_match = re.search(r'(z\d+)', sheet_name, re.IGNORECASE)
-    if zona_match:
-        zona = zona_match.group(1).lower()
-    return kuota, hari, zona
+    gb, hari, zona = None, None, None
+    m = re.search(r'(\d+[\.,]?\d*)\s*gb', sheet_name, re.IGNORECASE)
+    if m:
+        gb = m.group(1).replace(',', '.').replace(' ', '')
+    m2 = re.search(r'(\d+)\s*(h|hari)', sheet_name, re.IGNORECASE)
+    if m2:
+        hari = m2.group(1)
+    m3 = re.search(r'(z\d+)', sheet_name, re.IGNORECASE)
+    if m3:
+        zona = m3.group(1).lower()
+    return gb, hari, zona
 
 def buat_nama_file(file_index, sheet_name, qty, bulk_text):
-    kuota, hari, zona = parse_sheet_name(sheet_name)
-    if kuota:
-        kuota_text = format_decimal_with_koma(f"{kuota}gb")
+    gb, hari, zona = parse_sheet_name(sheet_name)
+    if gb:
+        kuota_text = format_decimal_with_koma(f"{gb}gb")
     else:
         kuota_text = "unknowngb"
     if bulk_text:
@@ -85,17 +94,17 @@ def buat_nama_file(file_index, sheet_name, qty, bulk_text):
         filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
     return filename
 
-# 2. Load database sekali saat app start (tidak perlu upload)
+# ------- UI STREAMLIT --------
+st.title("Automasi CSV Multi Sheet Voucher (Smart Matching Bulk)")
+
 if not os.path.exists('database.xlsx'):
     st.error("File database.xlsx tidak ditemukan di direktori repo.")
     st.stop()
 bulk_db = load_bulk_database('database.xlsx')
-
-# 3. UI Streamlit - hanya file voucher yang diupload user
-st.title("Automasi CSV Multi Sheet (Database Bulk dari Repo)")
+if bulk_db is None:
+    st.stop()
 
 uploaded_excel = st.file_uploader("Upload file Excel Voucher (.xlsx)", type=["xlsx"])
-
 batch_size = st.number_input("Batch Size", min_value=1, max_value=10000, value=1000)
 
 if uploaded_excel:
@@ -125,9 +134,10 @@ if uploaded_excel:
                     st.success(f"✅ Sheet **{sheet_selected}** tidak mengandung duplikat angka.")
 
                 num_files = math.ceil(total_numbers / batch_size)
-
-                # bulk dari database repo
+                # ------------- SMART MATCHING BULK -------------
                 bulk_text = cari_bulk(sheet_selected, bulk_db)
+                # Debug
+                # st.write(f"Sheet: {sheet_selected} | Key: {extract_key(sheet_selected)} | Bulk: {bulk_text}")
 
                 files_buffers = []
                 for i in range(num_files):
@@ -184,11 +194,10 @@ if uploaded_excel:
                     file_name=zip_filename,
                     mime="application/zip"
                 )
-
 else:
     st.info("Silakan upload file Excel voucher (xlsx) terlebih dahulu.")
 
-# Footer (boleh dipertahankan)
+# Footer
 st.markdown("""
 <style>
 .footer {
