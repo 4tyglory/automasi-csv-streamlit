@@ -4,30 +4,23 @@ import re
 import math
 import io
 import zipfile
+import os
 
-# ---------- Helper Fungsi ----------
-
+# 1. Fungsi normalisasi & cari bulk sama seperti sebelumnya
 def normalize_sheetname(name):
-    """Normalisasi nama sheet/nama barang agar bisa match walau format beda."""
     if not isinstance(name, str):
         name = str(name)
     name = name.lower()
-    name = re.sub(r'program|hari|\s+', '', name)  # hilangkan kata2 ini & spasi
-    name = name.replace('.', 'koma')  # jika ingin decimal dengan koma
+    name = re.sub(r'program|hari|\s+', '', name)
+    name = name.replace('.', 'koma')
     return name
 
-@st.cache_data
-def load_bulk_database(database_file):
-    """Load dan normalisasi database Excel."""
-    db = pd.read_excel(database_file)
-    if 'Nama Barang' not in db.columns or 'bulk' not in db.columns:
-        st.error("Kolom 'Nama Barang' dan/atau 'bulk' tidak ditemukan di database.")
-        return None
+def load_bulk_database(path='database.xlsx'):
+    db = pd.read_excel(path)
     db['SheetNorm'] = db['Nama Barang'].apply(normalize_sheetname)
     return db
 
 def cari_bulk(sheet_name, db):
-    """Ambil bulk code dari db, return bulkUnknown jika tidak ketemu."""
     sheet_norm = normalize_sheetname(sheet_name)
     row = db[db['SheetNorm'] == sheet_norm]
     if not row.empty:
@@ -92,21 +85,20 @@ def buat_nama_file(file_index, sheet_name, qty, bulk_text):
         filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
     return filename
 
-# ---------- UI Streamlit ----------
+# 2. Load database sekali saat app start (tidak perlu upload)
+if not os.path.exists('database.xlsx'):
+    st.error("File database.xlsx tidak ditemukan di direktori repo.")
+    st.stop()
+bulk_db = load_bulk_database('database.xlsx')
 
-st.title("Automasi CSV Multi Sheet + Penamaan File Khusus & Bulk dari Database")
+# 3. UI Streamlit - hanya file voucher yang diupload user
+st.title("Automasi CSV Multi Sheet (Database Bulk dari Repo)")
 
 uploaded_excel = st.file_uploader("Upload file Excel Voucher (.xlsx)", type=["xlsx"])
-database_excel = st.file_uploader("Upload file Database Bulk (.xlsx)", type=["xlsx"])
 
 batch_size = st.number_input("Batch Size", min_value=1, max_value=10000, value=1000)
 
-if uploaded_excel and database_excel:
-    # Load bulk database dan validasi
-    bulk_db = load_bulk_database(database_excel)
-    if bulk_db is None:
-        st.stop()
-
+if uploaded_excel:
     xls = pd.ExcelFile(uploaded_excel)
     sheet_names = xls.sheet_names
 
@@ -134,7 +126,7 @@ if uploaded_excel and database_excel:
 
                 num_files = math.ceil(total_numbers / batch_size)
 
-                # Pakai bulk dari database hasil normalisasi
+                # bulk dari database repo
                 bulk_text = cari_bulk(sheet_selected, bulk_db)
 
                 files_buffers = []
@@ -194,9 +186,9 @@ if uploaded_excel and database_excel:
                 )
 
 else:
-    st.info("Silakan upload file Excel voucher dan file database bulk (xlsx).")
+    st.info("Silakan upload file Excel voucher (xlsx) terlebih dahulu.")
 
-# Footer
+# Footer (boleh dipertahankan)
 st.markdown("""
 <style>
 .footer {
