@@ -5,6 +5,36 @@ import math
 import io
 import zipfile
 
+# ---------- Helper Fungsi ----------
+
+def normalize_sheetname(name):
+    """Normalisasi nama sheet/nama barang agar bisa match walau format beda."""
+    if not isinstance(name, str):
+        name = str(name)
+    name = name.lower()
+    name = re.sub(r'program|hari|\s+', '', name)  # hilangkan kata2 ini & spasi
+    name = name.replace('.', 'koma')  # jika ingin decimal dengan koma
+    return name
+
+@st.cache_data
+def load_bulk_database(database_file):
+    """Load dan normalisasi database Excel."""
+    db = pd.read_excel(database_file)
+    if 'Nama Barang' not in db.columns or 'bulk' not in db.columns:
+        st.error("Kolom 'Nama Barang' dan/atau 'bulk' tidak ditemukan di database.")
+        return None
+    db['SheetNorm'] = db['Nama Barang'].apply(normalize_sheetname)
+    return db
+
+def cari_bulk(sheet_name, db):
+    """Ambil bulk code dari db, return bulkUnknown jika tidak ketemu."""
+    sheet_norm = normalize_sheetname(sheet_name)
+    row = db[db['SheetNorm'] == sheet_norm]
+    if not row.empty:
+        return row.iloc[0]['bulk']
+    else:
+        return "bulkUnknown"
+
 def extract_12digit_numbers(df):
     numbers = []
     for _, row in df.iterrows():
@@ -31,19 +61,15 @@ def parse_sheet_name(sheet_name: str):
     kuota = None
     hari = None
     zona = None
-
     kuota_match = re.search(r'(\d+[\.,]?\d*)\s*gb', sheet_name, re.IGNORECASE)
     if kuota_match:
         kuota = kuota_match.group(1).replace(',', '.').replace(' ', '')
-
     hari_match = re.search(r'(\d+)\s*h', sheet_name, re.IGNORECASE)
     if hari_match:
         hari = hari_match.group(1)
-
     zona_match = re.search(r'(z\d+)', sheet_name, re.IGNORECASE)
     if zona_match:
         zona = zona_match.group(1).lower()
-
     return kuota, hari, zona
 
 def buat_nama_file(file_index, sheet_name, qty, bulk_text):
@@ -52,41 +78,40 @@ def buat_nama_file(file_index, sheet_name, qty, bulk_text):
         kuota_text = format_decimal_with_koma(f"{kuota}gb")
     else:
         kuota_text = "unknowngb"
-
     if bulk_text:
         bulk_text = bulk_text.replace(" ", "")
         bulk_text = format_decimal_with_koma(bulk_text)
+        if not bulk_text.startswith("bulk"):
+            bulk_text = "bulk" + bulk_text
     else:
         bulk_text = "bulkUnknown"
-
     hari_text = f"{hari}hari" if hari else "unknownhari"
-
     if zona:
         filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {zona} {qty}.csv"
     else:
         filename = f"{file_index} vcr fisik internet {hari_text} {kuota_text} {bulk_text} {qty}.csv"
-
     return filename
 
-st.title("Automasi CSV Multi Sheet dengan Penamaan File Khusus dan Pengecekan Duplikat")
+# ---------- UI Streamlit ----------
 
-uploaded_excel = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
+st.title("Automasi CSV Multi Sheet + Penamaan File Khusus & Bulk dari Database")
 
-if uploaded_excel:
+uploaded_excel = st.file_uploader("Upload file Excel Voucher (.xlsx)", type=["xlsx"])
+database_excel = st.file_uploader("Upload file Database Bulk (.xlsx)", type=["xlsx"])
+
+batch_size = st.number_input("Batch Size", min_value=1, max_value=10000, value=1000)
+
+if uploaded_excel and database_excel:
+    # Load bulk database dan validasi
+    bulk_db = load_bulk_database(database_excel)
+    if bulk_db is None:
+        st.stop()
+
     xls = pd.ExcelFile(uploaded_excel)
     sheet_names = xls.sheet_names
 
-    batch_size = 1000
-
     if 'processed_sheets' not in st.session_state:
         st.session_state.processed_sheets = {}
-
-    contoh_database_bulk = {
-        "2.5 GB 5H Z3": "bulk10.9K",
-        "3 GB 5H Z3": "bulk12K",
-        "4 GB 7H Z3": "bulk18K",
-        # Tambahkan sesuai database asli
-    }
 
     if st.button("▶️ Proses Semua Sheet"):
         with st.spinner('⚙️ Memproses semua sheet...'):
@@ -109,7 +134,8 @@ if uploaded_excel:
 
                 num_files = math.ceil(total_numbers / batch_size)
 
-                bulk_text = contoh_database_bulk.get(sheet_selected, "bulkUnknown")
+                # Pakai bulk dari database hasil normalisasi
+                bulk_text = cari_bulk(sheet_selected, bulk_db)
 
                 files_buffers = []
                 for i in range(num_files):
@@ -118,11 +144,9 @@ if uploaded_excel:
                     file_index = i + 1
 
                     filename = buat_nama_file(file_index, sheet_selected, qty, bulk_text)
-
                     buffer = io.BytesIO()
                     buffer.write('\n'.join(batch_numbers).encode('utf-8'))
                     buffer.seek(0)
-
                     files_buffers.append((filename, buffer))
 
                 processed[sheet_selected] = files_buffers
@@ -134,7 +158,6 @@ if uploaded_excel:
     if 'processed_sheets' in st.session_state and st.session_state.processed_sheets:
         st.subheader("📋 Sheet yang sudah diproses:")
         sheet_list = list(st.session_state.processed_sheets.keys())
-
         st.markdown('<div style="display:flex; overflow-x:auto; white-space:nowrap; padding:10px 0; border:1px solid #ddd; border-radius:8px;">', unsafe_allow_html=True)
         selected_sheets = []
         for sheet in sheet_list:
@@ -157,10 +180,11 @@ if uploaded_excel:
                             zip_file.writestr(zip_path, buffer.getvalue())
                 zip_buffer.seek(0)
 
-                if len(selected_sheets) == len(st.session_state.processed_sheets):
-                    zip_filename = "all sheet.zip"
-                else:
-                    zip_filename = f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
+                zip_filename = (
+                    "all_sheet.zip"
+                    if len(selected_sheets) == len(st.session_state.processed_sheets)
+                    else f"hasil_csv_{'_'.join([s.replace(' ', '_') for s in selected_sheets])}.zip"
+                )
 
                 st.download_button(
                     label="📥 Download ZIP",
@@ -168,8 +192,9 @@ if uploaded_excel:
                     file_name=zip_filename,
                     mime="application/zip"
                 )
+
 else:
-    st.info("Silakan upload file Excel terlebih dahulu.")
+    st.info("Silakan upload file Excel voucher dan file database bulk (xlsx).")
 
 # Footer
 st.markdown("""
